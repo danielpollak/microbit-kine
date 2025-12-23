@@ -65,14 +65,10 @@ class MicrobitSerial: NSObject, ObservableObject, ORSSerialPortDelegate {
                         y: parts[1],
                         z: parts[2]
                     )
-//                    print("Updated accelState.accel:", self.accelState.accel)
 
                 } else {
                     self.parsedAccel = nil
                 }
-                
-//                print("Updating UI: line='\(line)', parts=\(parts)")
-
             }
         }
     }
