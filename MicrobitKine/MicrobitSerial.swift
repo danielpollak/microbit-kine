@@ -8,21 +8,17 @@ import Foundation
 import Combine
 import ORSSerial
 
-class MicrobitSerial: NSObject, ObservableObject {
-    let accelState: AccelState
+
+class MicrobitSerial: NSObject, ObservableObject, ORSSerialPortDelegate {
+    @Published var parsedAccel: Accel? = nil
     @Published var accelText: String = "Waiting…"
+    
+    let accelState: AccelState
 
     private var serialPort: ORSSerialPort?
     private var buffer = ""
-    
-    //debugging
-    private var lastPacketTime: TimeInterval = 0
-//    private var lastUIUpdate: TimeInterval = 0
-    private var lastUIUpdate: TimeInterval? = nil
 
-
-
-    init(accelState:AccelState) {
+    init(accelState: AccelState) {
         self.accelState = accelState
         super.init()
         openSerial()
@@ -30,15 +26,8 @@ class MicrobitSerial: NSObject, ObservableObject {
 
     func openSerial() {
         let ports = ORSSerialPortManager.shared().availablePorts
-        print("Detected serial ports:")
-        for p in ports {
-            print("  - \(p.name) (\(p.path))")
-        }
-
         guard let port = ports.first(where: { $0.path.contains("usbmodem") }) else {
-            DispatchQueue.main.async {
-                self.accelText = "No micro:bit found"
-            }
+            accelText = "No micro:bit found"
             return
         }
 
@@ -46,18 +35,6 @@ class MicrobitSerial: NSObject, ObservableObject {
         port.baudRate = 115200
         port.delegate = self
         port.open()
-    }
-}
-
-// MARK: - ORSSerialPortDelegate
-
-extension MicrobitSerial: ORSSerialPortDelegate {
-
-    func serialPortWasOpened(_ serialPort: ORSSerialPort) {
-        DispatchQueue.main.async {
-            self.accelText = "micro:bit connected"
-        }
-        print("Serial port opened:", serialPort.path)
     }
 
     func serialPortWasRemovedFromSystem(_ serialPort: ORSSerialPort) {
@@ -67,81 +44,36 @@ extension MicrobitSerial: ORSSerialPortDelegate {
         self.serialPort = nil
     }
 
-
-
     func serialPort(_ serialPort: ORSSerialPort, didReceive data: Data) {
-        let now = Date().timeIntervalSince1970
-        let dt = now - lastPacketTime
-        lastPacketTime = now
-        print("Packet received, dt = \(dt)s, bytes = \(data.count)")
-        
-        // existing buf
         guard let chunk = String(data: data, encoding: .utf8) else { return }
         buffer += chunk
 
-        // Split buffer into numbers
-        var numbers = buffer.split(separator: ",").map { String($0) }
+        let lines = buffer.components(separatedBy: "\n")
+        buffer = lines.last ?? ""
 
-        // Process complete triples
-        while numbers.count >= 3 {
-            if let x = Double(numbers[0]),
-               let y = Double(numbers[1]),
-               let z = Double(numbers[2]) {
+        if lines.count > 1 {
+            let line = lines[lines.count - 2].trimmingCharacters(in: .whitespacesAndNewlines)
+            DispatchQueue.main.async {
+                self.accelText = line
 
-                // --- Measure UI update rate ---
-                DispatchQueue.main.async {
-                    let now = Date().timeIntervalSince1970
-                    let dt = now - (self.lastUIUpdate ?? now)
-                    self.lastUIUpdate = now
-                    print("UI updated, dt = \(dt)s, accel = \(x),\(y),\(z)")
+                // Try to parse numbers
+                let parts = line.split(separator: ",").compactMap { Double($0) }
+                if parts.count == 3 {
+                    self.parsedAccel = Accel(x: parts[0], y: parts[1], z: parts[2])
+                    self.accelState.accel = Accel(
+                        x: parts[0],
+                        y: parts[1],
+                        z: parts[2]
+                    )
+//                    print("Updated accelState.accel:", self.accelState.accel)
 
-                    self.accelState.accel = Accel(x: x, y: y, z: z)
-                    self.accelText = "\(x),\(y),\(z)"   // <-- update this property
+                } else {
+                    self.parsedAccel = nil
                 }
+                
+//                print("Updating UI: line='\(line)', parts=\(parts)")
 
-                // -----------------------------
             }
-
-            // Remove the processed numbers
-            numbers.removeFirst(3)
         }
-
-        // Save leftovers back to buffer
-        buffer = numbers.joined(separator: ",")
-    }
-
-
-//    func serialPort(_ serialPort: ORSSerialPort,
-//                    didReceive data: Data) {
-//        
-//        guard let chunk = String(data: data, encoding: .utf8) else { return }
-//        buffer += chunk
-//
-//        while let newline = buffer.firstIndex(of: "\n") {
-//            let line = String(buffer[..<newline])
-//            buffer.removeSubrange(...newline)
-//            print("RAW:", line)
-//            DispatchQueue.main.async {
-//                self.accelText = line
-//            }
-//
-//            let parts = line.split(separator: ",")
-//
-//            guard parts.count >= 3,
-//                  let x = Double(parts[0]),
-//                  let y = Double(parts[1]),
-//                  let z = Double(parts[2]) else { continue }
-//
-//            DispatchQueue.main.async {
-//                self.accelState.accel = Accel(x: x, y: y, z: z)
-//            }
-//        }
-//    }
-
-
-    func serialPort(_ serialPort: ORSSerialPort,
-                    didEncounterError error: Error) {
-        print("Serial error:", error)
     }
 }
-

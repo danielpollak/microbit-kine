@@ -4,26 +4,62 @@
 //
 //  Created by Daniel Pollak on 12/22/25.
 //
-
+//
 import SwiftUI
+//struct OverlayView: View {
+//    @ObservedObject var microbit: MicrobitSerial
+//    @EnvironmentObject var accelState: AccelState
+//
+//    var body: some View {
+//        GeometryReader { geo in
+//            let center = CGPoint(x: geo.size.width / 2,
+//                                 y: geo.size.height / 2)
+//
+//            let dx = accelState.accel.x * accelState.gain * 0.05
+//            let dy = -accelState.accel.y * accelState.gain * 0.05
+//
+//            ZStack {
+//                Circle()
+//                    .fill(Color.red)
+//                    .frame(width: 20, height: 20)
+//                    .position(x: center.x + dx,
+//                              y: center.y + dy)
+//
+//                VStack {
+//                    Spacer()
+//                    Text(microbit.accelText)
+//                        .font(.system(size: 12, design: .monospaced))
+//                        .foregroundColor(.white)
+//                        .background(Color.black.opacity(0.6))
+//                        .padding()
+//
+//                    Slider(value: $accelState.gain, in: 0...5)
+//                        .frame(width: 200)
+//                        .padding()
+//                }
+//            }
+//        }
+//    }
+//}
+
+
+
 struct OverlayView: View {
     @ObservedObject var microbit: MicrobitSerial
     @EnvironmentObject var accelState: AccelState
 
+    @State private var dotX: CGFloat = 0
+    @State private var dotY: CGFloat = 0
+
     var body: some View {
         GeometryReader { geo in
-            let center = CGPoint(x: geo.size.width / 2,
-                                 y: geo.size.height / 2)
-
-            let dx = accelState.accel.x * accelState.gain * 0.05
-            let dy = -accelState.accel.y * accelState.gain * 0.05
-
+            let center = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2)
+            
             ZStack {
                 Circle()
                     .fill(Color.red)
                     .frame(width: 20, height: 20)
-                    .position(x: center.x + dx,
-                              y: center.y + dy)
+                    .position(x: center.x + dotX, y: center.y + dotY)
 
                 VStack {
                     Spacer()
@@ -37,6 +73,11 @@ struct OverlayView: View {
                         .frame(width: 200)
                         .padding()
                 }
+            }
+            .onReceive(accelState.$accel) { accel in
+                dotX = CGFloat(accel.x) * accelState.gain * 0.05
+                dotY = -CGFloat(accel.y) * accelState.gain * 0.05
+                print(dotX, dotY)
             }
         }
     }
